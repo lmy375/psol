@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "psol"
+version = "0.1.0"
+description = "A solana command-line tool written in python."
+authors = ["Moon"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+anchorpy = "^0.20.1"
+requests = "^2.32.3"
+
+[tool.poetry.scripts]
+peth = 'psol.cli:main'
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
