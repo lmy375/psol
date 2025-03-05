@@ -10,12 +10,16 @@ IDL_CACHE = PSOL_DATA / "idl_cache"
 ACCOUNTS_IDL = PSOL_DATA / "accounts_idl.json"
 INSTRUCTIONS_IDL = PSOL_DATA / "instructions_idl.json"
 TYPES_IDL = PSOL_DATA / "types_idl.json"
+NAMES = PSOL_DATA / "names.json"
 
 if not ACCOUNTS_IDL.parent.exists():
     ACCOUNTS_IDL.parent.mkdir(parents=True)
 
 if not INSTRUCTIONS_IDL.parent.exists():
     INSTRUCTIONS_IDL.parent.mkdir(parents=True)
+
+if not NAMES.parent.exists():
+    NAMES.parent.mkdir(parents=True)
 
 
 class IdlDatabase(object):
@@ -31,11 +35,17 @@ class IdlDatabase(object):
         else:
             self.instructions = json.loads(INSTRUCTIONS_IDL.read_text())
 
+        if not NAMES.exists():
+            self.names = {}
+        else:
+            self.names = json.loads(NAMES.read_text())
+
         atexit.register(self.save)
 
     def save(self):
         ACCOUNTS_IDL.write_text(json.dumps(self.accounts, indent=2))
         INSTRUCTIONS_IDL.write_text(json.dumps(self.instructions, indent=2))
+        NAMES.write_text(json.dumps(self.names, indent=2))
 
     def save_idl(self, cluster: str, program_id: str, idl: str) -> str:
 

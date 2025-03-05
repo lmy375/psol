@@ -134,7 +134,9 @@ class PsolConsole(cmd.Cmd):
             print(f"IDL not found for {program_id}")
             return
 
-        print(f"IDL found for {program_id} from {src}")
+        name = json.loads(idl)["name"]
+
+        print(f"IDL {name} found for {program_id} from {src}")
 
     def do_local_idl(self, file_path: str):
         """
@@ -145,7 +147,8 @@ class PsolConsole(cmd.Cmd):
             return
 
         idl = open(file_path).read()
-        print(f"IDL loaded from {file_path}")
+        name = json.loads(idl)["name"]
+        print(f"IDL {name} loaded from {file_path}")
 
         name = json.loads(idl)["name"]
         path = self.psol.idl_db.save_idl("local", name, idl)
@@ -157,6 +160,10 @@ class PsolConsole(cmd.Cmd):
         if parsed:
             print("---- Parsed ----")
             print(json.dumps(parsed, indent=2, cls=SolanaJSONEncoder))
+
+    def do_name(self, pubkey: str):
+        name = self.psol.get_account_name(pubkey)
+        print(name)
 
     def do_tx(self, tx_sig: str):
         tx = self.psol.get_transaction(tx_sig)

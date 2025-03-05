@@ -109,6 +109,52 @@ class Psol(object):
 
         return acc_dict, parsed_data
 
+    def get_account_name(self, pubkey: str) -> str:
+        assert self.cluster == "mainnet", "Only support mainnet"
+
+        if pubkey in self.idl_db.names:
+            return self.idl_db.names[pubkey]
+
+        try:
+            r = requests.get(
+                f"https://api-v2.solscan.io/v2/account?address={pubkey}",
+                headers={
+                    "Accept-Language": "en,zh-CN;q=0.9,zh;q=0.8",
+                    "Origin": "https://solscan.io",
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+                    "accept": "application/json, text/plain, */*",
+                },
+            )
+            resp = r.json()
+            assert resp["success"], "Solscan API failed"
+            name = resp["data"]["notifications"]["label"]
+            if name:
+                self.idl_db.names[pubkey] = name
+                return name
+        except Exception:
+            pass
+
+        try:
+            r = requests.post(
+                "https://api.solana.fm/v0/accounts",
+                headers={
+                    "content-type": "application/json",
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+                    "accept": "application/json",
+                },
+                json={"accountHashes": [pubkey]},
+            )
+            resp = r.json()
+            assert resp["status"] == "Success", "solana.fm API failed"
+            name += resp["result"][0]["data"]["friendlyName"]
+            if name:
+                self.idl_db.names[pubkey] = name
+                return name
+        except Exception:
+            pass
+
+        return "Unknown"
+
     def get_transaction(self, signature: str) -> dict:
         tx_sig = Signature.from_string(signature)
         tx = self.client.get_transaction(
