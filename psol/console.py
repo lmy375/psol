@@ -1,6 +1,12 @@
+import base64
 import cmd
 import json
 import os
+
+import requests
+from solders.message import Message
+from solders.pubkey import Pubkey
+from solders.transaction import VersionedTransaction
 
 from .psol import Psol
 from .utils import SolanaJSONEncoder
@@ -42,6 +48,12 @@ class PsolConsole(cmd.Cmd):
                 print(" ", k, ":\t", v)
         else:
             print(self._normal_str(data, full))
+
+    def _decode_hex_or_base64(self, s: str) -> bytes:
+        try:
+            return bytes.fromhex(s)
+        except Exception:
+            return base64.b64decode(s)
 
     def onecmd(self, line):
         try:
@@ -89,13 +101,13 @@ class PsolConsole(cmd.Cmd):
 
     def do_sh(self, arg):
         """
-        Run system shell command.
+        sh <cmd>: Run system shell command.
         """
         os.system(arg)
 
     def do_py(self, arg):
         """
-        Eval python script.
+        py <expr>: Eval python script.
         """
         print(eval(arg.strip()))
 
@@ -114,7 +126,7 @@ class PsolConsole(cmd.Cmd):
         return True
 
     def do_ipython(self, arg=None):
-
+        "ipython: Open ipython console"
         __import__("IPython").embed(colors="Linux")
 
     def do_cluster(self, cluster: str):
@@ -155,6 +167,9 @@ class PsolConsole(cmd.Cmd):
         print(f"Saved to {path}")
 
     def do_account(self, pubkey: str):
+        """
+        account <pubkey>: Load account info.
+        """
         account, parsed = self.psol.get_account_info(pubkey)
         print(json.dumps(account, indent=2, cls=SolanaJSONEncoder))
         if parsed:
@@ -162,13 +177,97 @@ class PsolConsole(cmd.Cmd):
             print(json.dumps(parsed, indent=2, cls=SolanaJSONEncoder))
 
     def do_name(self, pubkey: str):
+        """
+        name <pubkey>: Get account name
+        """
         name = self.psol.get_account_name(pubkey)
         print(name)
 
     def do_tx(self, tx_sig: str):
+        """
+        tx <sig>: Print tx info.
+        """
         tx = self.psol.get_transaction(tx_sig)
         print(json.dumps(tx, indent=2, cls=SolanaJSONEncoder))
 
     def do_ix_decode(self, ix_data: str):
-        decoded = self.psol.decode_ix_data(ix_data)
+        """
+        ix_decode <data>: Decode ix data (hex or base64).
+        """
+        data = self._decode_hex_or_base64(ix_data)
+        decoded = self.psol.decode_ix_data(data.hex())
         print(json.dumps(decoded, indent=2, cls=SolanaJSONEncoder))
+
+    def do_tx_decode(self, tx_data: str):
+        """
+        tx_decode <tx_data>: Decode tx data (hex or base64).
+        """
+        data = self._decode_hex_or_base64(tx_data)
+        tx = VersionedTransaction.from_bytes(data)
+        print(repr(tx))
+
+    def do_tx_simulate(self, tx_data: str):
+        """
+        tx_simulate <tx_data>: Simulate tx data (hex or base64).
+        """
+        data = self._decode_hex_or_base64(tx_data)
+
+        url = self.client._provider.endpoint_uri
+        resp = requests.post(
+            url,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "simulateTransaction",
+                "params": [
+                    base64.b64encode(data).decode(),
+                    {
+                        "encoding": "base64",
+                        "sigVerify": False,
+                        "replaceRecentBlockhash": True,
+                    },
+                ],
+            },
+            headers={"Content-Type": "application/json"},
+        )
+        value = resp.json()["result"]["value"]
+        print(json.dumps(value, indent=2))
+
+        # tx = VersionedTransaction.from_bytes(data)
+        # resp = self.client.simulate_transaction(tx, sig_verify=False)
+        # print(repr(resp.value))
+
+    def do_msg_decode(self, msg_data: str):
+        """
+        msg_decode <msg_data>: Decode message data
+        """
+        data = self._decode_hex_or_base64(msg_data)
+        msg = Message.from_bytes(data)
+        print(repr(msg))
+
+    def do_pda(self, arg_str: str):
+        """
+        pda <program_id> [<pubkey|hex|string>, ..]: Find program address.
+        """
+        args = arg_str.split()
+        program_id = Pubkey.from_string(args[0])
+        seeds = []
+        for value in args[1:]:
+            try:
+                pubkey = Pubkey.from_string(value)
+                seeds.append(bytes(pubkey))
+                continue
+            except ValueError:
+                pass
+
+            try:
+                seeds.append(bytes.fromhex(value))
+                continue
+            except ValueError:
+                pass
+
+            seeds.append(bytes(value, "utf-8"))
+
+        pda, bump = Pubkey.find_program_address(seeds, program_id)
+        print("PDA:", pda)
+        print("Bump:", bump)
