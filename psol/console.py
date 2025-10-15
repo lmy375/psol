@@ -2,10 +2,13 @@ import base64
 import cmd
 import json
 import os
+import urllib
 
+import base58
 import requests
 from solders.message import Message
 from solders.pubkey import Pubkey
+from solders.signature import Signature
 from solders.transaction import VersionedTransaction
 
 from .psol import Psol
@@ -126,8 +129,38 @@ class PsolConsole(cmd.Cmd):
         return True
 
     def do_ipython(self, arg=None):
-        "ipython: Open ipython console"
+        """
+        ipython: Open ipython console
+        """
         __import__("IPython").embed(colors="Linux")
+
+    def do_base58(self, arg: str):
+        """
+        base58 enc <hex>: Encode into base58
+        base58 dec <base58>: Decode base58
+        """
+        op, text = arg.split()
+        if op == "enc":
+            if text.startswith("0x"):
+                text = text[2:]
+            data = bytes.fromhex(text)
+            print(f"Data Length: {len(data)} bytes")
+            print(f"Base58: {base58.b58encode(data).decode()}")
+            print(f"Base58Check: {base58.b58encode_check(data).decode()}")
+        else:
+            assert op == "dec"
+            try:
+                data = base58.b58decode_check(text)
+                print("Base58 with check:")
+                print(f"  Data Length: {len(data)} bytes")
+                print(f"  Hex: {data.hex()}")
+            except Exception:
+                pass
+
+            data = base58.b58decode(text)
+            print("Base58:")
+            print(f"  Data Length: {len(data)} bytes")
+            print(f"  Hex: {data.hex()}")
 
     def do_cluster(self, cluster: str):
         """
@@ -146,7 +179,7 @@ class PsolConsole(cmd.Cmd):
             print(f"IDL not found for {program_id}")
             return
 
-        name = json.loads(idl)["name"]
+        name = json.loads(idl)["metadata"]["name"]
 
         print(f"IDL {name} found for {program_id} from {src}")
 
@@ -159,10 +192,8 @@ class PsolConsole(cmd.Cmd):
             return
 
         idl = open(file_path).read()
-        name = json.loads(idl)["name"]
+        name = json.loads(idl)["metadata"]["name"]
         print(f"IDL {name} loaded from {file_path}")
-
-        name = json.loads(idl)["name"]
         path = self.psol.idl_db.save_idl("local", name, idl)
         print(f"Saved to {path}")
 
@@ -189,6 +220,39 @@ class PsolConsole(cmd.Cmd):
         """
         tx = self.psol.get_transaction(tx_sig)
         print(json.dumps(tx, indent=2, cls=SolanaJSONEncoder))
+
+    def do_tx_base64(self, tx_sig: str):
+        """
+        tx_base64: Print tx base64 bytes.
+        """
+        tx_sig = Signature.from_string(tx_sig)
+        resp = self.client.get_transaction(
+            tx_sig, max_supported_transaction_version=100, encoding="base64"
+        ).value
+        base64_data = base64.b64encode(
+            bytes(resp.transaction.transaction.message)
+        ).decode()
+        print(base64_data)
+
+    def do_inspect(self, base64_data: str):
+        """
+        inspect <tx_sig>:  Inspect from tx signature.
+        inspect <base64_data>:  Inspect from base64 tx data.
+        """
+        try:
+            tx_sig = Signature.from_string(base64_data)
+            resp = self.client.get_transaction(
+                tx_sig, max_supported_transaction_version=100, encoding="base64"
+            ).value
+            base64_data = base64.b64encode(
+                bytes(resp.transaction.transaction.message)
+            ).decode()
+        except Exception:
+            pass
+
+        url = f"https://explorer.solana.com/tx/inspector?message={urllib.parse.quote(base64_data)}"
+        print(url)
+        self.do_open(url)
 
     def do_ix_decode(self, ix_data: str):
         """

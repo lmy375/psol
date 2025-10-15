@@ -40,6 +40,7 @@ class Psol(object):
 
     def fetch_idl_solscan(self, program_id: str) -> str:
         assert self.cluster == "mainnet", "Only support mainnet"
+
         r = requests.get(
             f"https://api-v2.solscan.io/v2/account/anchor_idl?address={program_id}",
             headers={
@@ -53,22 +54,48 @@ class Psol(object):
         assert resp["success"], "Solscan API failed"
         return json.dumps(resp["data"])
 
+    def fetch_idl_explorer(self, program_id: str) -> str:
+        assert self.cluster == "mainnet", "Only support mainnet"
+
+        r = requests.get(
+            f"https://explorer.solana.com/api/anchor?programAddress={program_id}&cluster=0",
+            headers={
+                "Accept-Language": "en,zh-CN;q=0.9,zh;q=0.8",
+                "Origin": "https://explorer.solana.com",
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+                "accept": "application/json, text/plain, */*",
+            },
+        )
+        resp = r.json()
+        return json.dumps(resp["idl"])
+
     def fetch_idl(self, program_id: str) -> tuple[str, str | None]:
+
         idl = self.idl_db.get_idl(self.cluster, program_id)
         if idl:
             return "local", idl
 
-        try:
-            idl = self.fetch_idl_solscan(program_id)
-            self.idl_db.save_idl(self.cluster, program_id, idl)
-            return "solscan", idl
-        except Exception:
+        def _get_idl():
             try:
-                idl = self.fetch_idl_onchain(program_id)
-                self.idl_db.save_idl(self.cluster, program_id, idl)
-                return "onchain", idl
+                idl = self.fetch_idl_explorer(program_id)
+                return "explorer", idl
             except Exception:
-                return "notfound", None
+                pass
+
+            try:
+                idl = self.fetch_idl_solscan(program_id)
+                return "solscan", idl
+            except Exception:
+                pass
+
+            return "NotFound", None
+
+        typ, idl = _get_idl()
+        if idl:
+            self.idl_db.save_idl(self.cluster, program_id, idl)
+            return typ, idl
+
+        return "NotFound", None
 
     def set_cluster(self, cluster: str):
         assert cluster in RPC_URL, f"Cluster {cluster} not supported"
