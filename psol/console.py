@@ -270,6 +270,13 @@ class PsolConsole(cmd.Cmd):
         tx = VersionedTransaction.from_bytes(data)
         print(repr(tx))
 
+        try:
+            tx.sanitize()
+            print("\n---- Transaction is valid ----")
+        except Exception as e:
+            print("\n---- Transaction is invalid ----")
+            print("Sanitization error:", e)
+
     def do_tx_simulate(self, tx_data: str):
         """
         tx_simulate <tx_data>: Simulate tx data (hex or base64).
